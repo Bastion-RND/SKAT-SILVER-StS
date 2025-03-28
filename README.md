@@ -1,2 +1,2 @@
 # SKAT-SILVER-StS
-SKAT SILVER StS
+Проект для платы управления котлами SKAT-SILVER-StS (с мокрыми ТЭНами) под МК с 32 кБ памяти (STM32F030K6T6).
