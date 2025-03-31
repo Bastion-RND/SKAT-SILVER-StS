@@ -328,6 +328,7 @@ void Error_Handler(void);
 void adc_update();
 void ten_default_initialization();
 void check_if_sensor_is_broken(struct sSensor* sensor_ptr);
+void init_param_from_eeprom();
 void boiler_init(void);
 void check_alarms(void);
 /* USER CODE END Private defines */

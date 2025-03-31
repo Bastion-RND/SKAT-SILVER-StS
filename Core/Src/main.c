@@ -207,16 +207,8 @@ void check_if_sensor_is_broken(struct sSensor* sensor_ptr)
 	}
 }
 
-void boiler_init()
+void init_param_from_eeprom()
 {
-	HAL_ADC_MspInit(&hadc);
-	HAL_ADCEx_Calibration_Start(&hadc);
-	HAL_ADC_Start_DMA(&hadc, (uint32_t*)(&boiler.adc.value), 7);
-
-	LL_SPI_Enable(SPI1);
-
-	ten_default_initialization();
-
 	uint32_t data = eeprom_read_setting(FLASH_PAGE_ADDR_31);
 	boiler.parameters.boiler_type = (uint8_t)data;
 	data = data >> 8;
@@ -227,6 +219,23 @@ void boiler_init()
 		boiler.heater.parameters.aim_temp = SetTC_DEFAULT;
 		eeprom_write_setting(boiler.heater.parameters.aim_temp << 8 | boiler.parameters.boiler_type, FLASH_PAGE_ADDR_31);
 	}
+
+	if((boiler.parameters.boiler_type != 4) || (boiler.parameters.boiler_type != 8))
+	{
+		boiler.parameters.boiler_type = 8;
+		eeprom_write_setting(boiler.heater.parameters.aim_temp << 8 | boiler.parameters.boiler_type, FLASH_PAGE_ADDR_31);
+	}
+}
+
+void boiler_init()
+{
+	HAL_ADC_MspInit(&hadc);
+	HAL_ADCEx_Calibration_Start(&hadc);
+	HAL_ADC_Start_DMA(&hadc, (uint32_t*)(&boiler.adc.value), 7);
+	LL_SPI_Enable(SPI1);
+
+	ten_default_initialization();
+	init_param_from_eeprom();
 
 	boiler.parameters.user_interface_step = 0;
 	boiler.display.counter = 0;
