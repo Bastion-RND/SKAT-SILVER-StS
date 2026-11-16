@@ -37,9 +37,9 @@
 extern struct sBoiler boiler;
 extern uint16_t delay_counter_1ms;
 extern uint16_t delay_counter_500ms;
+extern uint16_t led_counter_500ms;
 extern 	uint8_t Flag_TEN_Chice_Start;
-extern struct sSensor* list_of_sensors[2];
-extern uint8_t sensors_list_size;
+
 
 /* USER CODE END PD */
 
@@ -139,13 +139,15 @@ void SysTick_Handler(void)
   /* USER CODE BEGIN SysTick_IRQn 1 */
   if(delay_counter_1ms)		delay_counter_1ms --;
 
-  if (delay_counter_500ms == 500)
+  if (led_counter_500ms > 500)
   {
-	  delay_counter_500ms = 0;
-	  boiler.display.blink = (boiler.display.blink) ? 0 : 1;
+	  led_counter_500ms = 0;
+  	  boiler.display.blink = (boiler.display.blink) ? 0 : 1;
   }
   else
-	  delay_counter_500ms++;
+	  led_counter_500ms++;
+
+  delay_counter_500ms = (delay_counter_500ms == 500) ? 0 : delay_counter_500ms + 1;
 
 
   /* USER CODE END SysTick_IRQn 1 */
@@ -173,6 +175,35 @@ void EXTI0_1_IRQHandler(void)
 }
 
 /**
+  * @brief This function handles EXTI line 2 and 3 interrupts.
+  */
+void EXTI2_3_IRQHandler(void)
+{
+  /* USER CODE BEGIN EXTI2_3_IRQn 0 */
+
+  /* USER CODE END EXTI2_3_IRQn 0 */
+  HAL_GPIO_EXTI_IRQHandler(ZC_3_Pin);
+  /* USER CODE BEGIN EXTI2_3_IRQn 1 */
+
+  /* USER CODE END EXTI2_3_IRQn 1 */
+}
+
+/**
+  * @brief This function handles EXTI line 4 to 15 interrupts.
+  */
+void EXTI4_15_IRQHandler(void)
+{
+  /* USER CODE BEGIN EXTI4_15_IRQn 0 */
+
+  /* USER CODE END EXTI4_15_IRQn 0 */
+  HAL_GPIO_EXTI_IRQHandler(ZC_2_Pin);
+  HAL_GPIO_EXTI_IRQHandler(ZC_1_Pin);
+  /* USER CODE BEGIN EXTI4_15_IRQn 1 */
+
+  /* USER CODE END EXTI4_15_IRQn 1 */
+}
+
+/**
   * @brief This function handles DMA1 channel 1 interrupt.
   */
 void DMA1_Channel1_IRQHandler(void)
@@ -194,34 +225,20 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
 	boiler.adc.Vref_k = (float)boiler.adc.Vref_Const/(float)boiler.adc.value[6];
 
-	boiler.heater.output.sensor.tC_Instant = Convert_Adc_To_Float_NTC(boiler.adc.value[0]);
-	boiler.heater.output.sensor.tC_Average = boiler.heater.output.sensor.tC_Average*0.95 + boiler.heater.output.sensor.tC_Instant*0.05;
+	boiler.heater.output.sensor.adc_value = boiler.adc.value[0];
+	boiler.heater.output.sensor.tC_Instant = Convert_Adc_To_Float_NTC(boiler.heater.output.sensor.adc_value);
+	boiler.heater.output.sensor.tC_Average = boiler.heater.output.sensor.tC_Average*0.7 + boiler.heater.output.sensor.tC_Instant*0.3;
 
-	if(boiler.adc.value[1] > 2430)
-	{
-		if(boiler.adc.anti_jitter_accum[1])
-			boiler.adc.anti_jitter_accum[1] --;
-	}
-	else if(boiler.adc.value[1] < 1890)
-	{
-		if(boiler.adc.anti_jitter_accum[1] < 20)
-			boiler.adc.anti_jitter_accum[1] ++;
-		else
-		{
-			boiler.adc.anti_jitter_accum[1] = 20;
-			boiler.errors.e03 = 1;
-		}
-	}
+	boiler.parameters.temperature_alarm.tC_Instant = (boiler.adc.value[1]*3.3)/40.27;
+	boiler.parameters.temperature_alarm.tC_Average = boiler.parameters.temperature_alarm.tC_Average*0.7 + boiler.parameters.temperature_alarm.tC_Instant*0.3;
 
-	boiler.heatsink.sensor.tC_Instant = convert_adc_to_float_T(boiler.adc.value[2]);
-	boiler.heatsink.sensor.tC_Average = boiler.heatsink.sensor.tC_Average*0.95 + boiler.heatsink.sensor.tC_Instant*0.05;
+	boiler.heatsink.sensor.adc_value = boiler.adc.value[2];
+	boiler.heatsink.sensor.tC_Instant = convert_adc_to_float_T(boiler.heatsink.sensor.adc_value);
+	boiler.heatsink.sensor.tC_Average = boiler.heatsink.sensor.tC_Average*0.7 + boiler.heatsink.sensor.tC_Instant*0.3;
 
 	boiler.upn.phase_C.Current_Instant = Convert_Adc_To_Float_UPN_Current(boiler.adc.value[3]);
 	boiler.upn.phase_B.Current_Instant = Convert_Adc_To_Float_UPN_Current(boiler.adc.value[4]);
 	boiler.upn.phase_A.Current_Instant = Convert_Adc_To_Float_UPN_Current(boiler.adc.value[5]);
-
-	for (uint8_t j = 0; j < sensors_list_size; ++j)
-		check_if_sensor_is_broken(list_of_sensors[j]);
 }
 //--------------------------------------------------------------------------------------------
 
@@ -250,7 +267,8 @@ float convert_adc_to_float_T(uint16_t adc_result)
 
 //------------------------------
 
-	if((adc_result < ADC_RESULT_MIN) || (adc_result > ADC_RESULT_MAX)) 	return(250);		// // Обрыв или КЗ
+	if((adc_result < ADC_RESULT_MIN) || (adc_result > ADC_RESULT_MAX)) return(250);		// // Обрыв или КЗ
+
 //------------------------------
 	R = (1000 * adc_result)/(4095 - adc_result);
 
@@ -281,15 +299,15 @@ float Convert_Adc_To_Float_NTC(uint16_t adc_data)
 	uint8_t i;
 
 	const uint8_t STEP = 17;
-	const uint16_t ADC_RESULT_MIN = 300;
-	const uint16_t ADC_RESULT_MAX = 4000;
+	const uint16_t ADC_RESULT_MIN = 250;
+	const uint16_t ADC_RESULT_MAX = 4027;
 
 	// R(25) = 10K; B(25/85) = 3435
 	const uint32_t Rt[17] = {190953, 112440, 68260, 42636, 27348, 17979, 12094,	8311, 5825,	4158, 3020,	2228, 1668,	1267, 974, 758, 597};
 
 
 //------------------------------
-	if((adc_data < ADC_RESULT_MIN) || (adc_data > ADC_RESULT_MAX))		return(250);		// Обрыв или КЗ
+	if((adc_data < ADC_RESULT_MIN) || (adc_data > ADC_RESULT_MAX)) return(250);		// // Обрыв или КЗ
 
 	//------------------------------
 	R = 5100 * adc_data;
@@ -321,15 +339,25 @@ void delay_1ms(uint16_t t)
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 	if(GPIO_Pin == ZC_3_Pin)
+	{
 		boiler.zero_cross.phase_3 = 1;
+		TIM17->CNT = 0;
+		TIM17->CCR1 = 250;
+	}
 	else if(GPIO_Pin == ZC_2_Pin)
+	{
 		boiler.zero_cross.phase_2 = 1;
+		TIM16->CNT = 0;
+		TIM16->CCR1 = 250;
+	}
 	else if(GPIO_Pin == ZC_1_Pin)
+	{
 		boiler.zero_cross.phase_1 = 1;
+		TIM14->CNT = 0;
+		TIM14->CCR1 = 250;
+	}
 	else if(GPIO_Pin == TERMOSTAT_Pin)
 		boiler.termostat.value = HAL_GPIO_ReadPin(TERMOSTAT_GPIO_Port, TERMOSTAT_Pin);
-	else if (GPIO_Pin == OVERTEMP_ALARM_Pin)
-		boiler.errors.e03 = !HAL_GPIO_ReadPin(TERMOSTAT_GPIO_Port, TERMOSTAT_Pin);
 }
 //--------------------------------------------------------------------------------
 /* USER CODE END 1 */

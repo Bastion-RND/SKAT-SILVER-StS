@@ -7,9 +7,6 @@
 
 #include "main.h"
 
-#define SAFETY_DELTA 2
-#define SAFETY_DELTA_TWO 8
-
 extern struct sBoiler boiler;
 
 void set_upn_type(uint8_t type)
@@ -21,15 +18,14 @@ void upn_update() {
 
 	switch (boiler.parameters.boiler_type)
 	{
-	case 4:
+	case 0:
 		boiler.ten3.is_active = 0;
 		boiler.ten2.is_active = 0;
 		break;
-	case 8:
+	case 1:
 		boiler.ten3.is_active = 0;
 		break;
 	}
-
 
 	if (boiler.upn.parameters.type == 1)
 	{

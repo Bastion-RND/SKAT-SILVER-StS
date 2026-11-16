@@ -4,7 +4,8 @@
 //----------------------------------------------------------------------------------------------
 uint32_t eeprom_read_setting(uint32_t addr)
 {
-	return (*(__IO uint32_t*) addr);
+	uint32_t data = (*(__IO uint32_t*) addr);
+	return data;
 }
 //----------------------------------------------------------------------------------------------
 void eeprom_write_setting(uint32_t data, uint32_t addr)
@@ -21,7 +22,6 @@ void eeprom_write_setting(uint32_t data, uint32_t addr)
 		HAL_FLASH_Unlock();
 		while(HAL_FLASHEx_Erase(&EraseInitStruct,&PAGEError) != HAL_OK) {};
 		while(HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, addr, (uint64_t)data) != HAL_OK) {};
-
 		HAL_FLASH_Lock();
 	}
 }

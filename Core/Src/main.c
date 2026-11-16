@@ -23,6 +23,7 @@
 #include "dma.h"
 #include "iwdg.h"
 #include "spi.h"
+#include "tim.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -52,11 +53,11 @@ struct sBoiler boiler = {0};
 uint32_t tickstart_1sec, tickstart_adc;
 uint16_t delay_counter_1ms;
 uint16_t delay_counter_500ms;
+uint16_t led_counter_500ms;
 uint8_t ten1_output, ten2_output, ten3_output;
 
 struct sSensor* list_of_sensors[2] = {&(boiler.heater.output.sensor), &(boiler.heatsink.sensor)};
 uint8_t sensors_list_size = sizeof(list_of_sensors) / sizeof(list_of_sensors[0]);
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -103,6 +104,9 @@ int main(void)
   MX_SPI1_Init();
   MX_ADC_Init();
   MX_IWDG_Init();
+  MX_TIM14_Init();
+  MX_TIM16_Init();
+  MX_TIM17_Init();
   /* USER CODE BEGIN 2 */
   boiler_init();
   /* USER CODE END 2 */
@@ -112,10 +116,17 @@ int main(void)
   while (1)
   {
 	  adc_update();
-	  key_state_update();
-	  user_interface_update();
-	  heating_update();
-	  upn_update();
+	  adc_check();
+	  if (boiler.testMode.flag == 0)
+	  {
+		  key_state_update();
+		  user_interface_update();
+		  heating_update();
+		  upn_update();
+	  }
+	  else
+		  run_test();
+
 	  one_second_event_handler();
 	  display_update();
   }
@@ -169,14 +180,69 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
+void check_IWDG_refresh()
+{
+	  if((HAL_GetTick() - tickstart_1sec) < 1000)
+		  return;
+
+	  tickstart_1sec = HAL_GetTick();
+	  HAL_IWDG_Refresh(&hiwdg);
+}
+
 void adc_update()
 {
 	if ((HAL_GetTick() - tickstart_adc) > 50)
 	{
-		HAL_ADC_Start_DMA(&hadc, (uint32_t*)(&boiler.adc.value), 7);
+		HAL_ADC_Start_DMA(&hadc, (uint32_t*)(&boiler.adc.value), ADC_CHANNELS_NUMBER);
 		tickstart_adc = HAL_GetTick();
 	}
 }
+
+void adc_check()
+{
+	for (uint8_t j = 0; j < sensors_list_size; ++j)
+			  check_if_sensor_is_broken(list_of_sensors[j]);
+}
+
+void set_e01(void) {boiler.errors |= 0x01;};
+//void reset_e01(void) {boiler.errors &= ~0x01;};
+uint8_t get_e01() { return (boiler.errors & 0x01) ? 1 : 0;};
+void set_e02(void) {boiler.errors |= 0x02;};
+void reset_e02(void) {boiler.errors &= ~0x02;};
+uint8_t get_e02() { return (boiler.errors & 0x02) ? 1 : 0;};
+void set_e03(void) {boiler.errors |= 0x04;};
+//void reset_e03(void) {boiler.errors &= ~0x04;};
+uint8_t get_e03() { return (boiler.errors & 0x04) ? 1 : 0;};
+void set_e04(void) {boiler.errors |= 0x08;};
+//void reset_e04(void) {boiler.errors &= ~0x08;};
+uint8_t get_e04() { return (boiler.errors & 0x08) ? 1 : 0;};
+void set_e05(void) {boiler.errors |= 0x10;};
+void reset_e05(void) {boiler.errors &= ~0x10;};
+uint8_t get_e05() { return (boiler.errors & 0x10) ? 1 : 0;};
+
+void set_f01(void) {boiler.errors |= 0x20;};
+void reset_f01(void) {boiler.errors &= ~0x20;};
+uint8_t get_f01() { return (boiler.errors & 0x20) ? 1 : 0;};
+
+void set_f02(void) {boiler.errors |= 0x40;};
+void reset_f02(void) {boiler.errors &= ~0x40;};
+uint8_t get_f02() { return (boiler.errors & 0x40) ? 1 : 0;};
+
+void set_f03(void) {boiler.errors |= 0x80;};
+void reset_f03(void) {boiler.errors &= ~0x80;};
+uint8_t get_f03() { return (boiler.errors & 0x80) ? 1 : 0;};
+
+void set_u01(void) {boiler.errors |= 0x100;};
+void reset_u01(void) {boiler.errors &= ~0x100;};
+uint8_t get_u01() { return (boiler.errors & 0x100) ? 1 : 0;};
+
+void set_u02(void) {boiler.errors |= 0x200;};
+void reset_u02(void) {boiler.errors &= ~0x200;};
+uint8_t get_u02() { return (boiler.errors & 0x200) ? 1 : 0;};
+
+void set_u03(void) {boiler.errors |= 0x400;};
+void reset_u03(void) {boiler.errors &= ~0x400;};
+uint8_t get_u03() { return (boiler.errors & 0x400) ? 1 : 0;};
 
 void ten_default_initialization()
 {
@@ -220,9 +286,9 @@ void init_param_from_eeprom()
 		eeprom_write_setting(boiler.heater.parameters.aim_temp << 8 | boiler.parameters.boiler_type, FLASH_PAGE_ADDR_31);
 	}
 
-	if((boiler.parameters.boiler_type != 4) || (boiler.parameters.boiler_type != 8))
+	if(boiler.parameters.boiler_type > 2)
 	{
-		boiler.parameters.boiler_type = 8;
+		boiler.parameters.boiler_type = 2;
 		eeprom_write_setting(boiler.heater.parameters.aim_temp << 8 | boiler.parameters.boiler_type, FLASH_PAGE_ADDR_31);
 	}
 }
@@ -231,27 +297,39 @@ void boiler_init()
 {
 	HAL_ADC_MspInit(&hadc);
 	HAL_ADCEx_Calibration_Start(&hadc);
-	HAL_ADC_Start_DMA(&hadc, (uint32_t*)(&boiler.adc.value), 7);
+	HAL_ADC_Start_DMA(&hadc, (uint32_t*)(&boiler.adc.value), ADC_CHANNELS_NUMBER);
 	LL_SPI_Enable(SPI1);
+
+	HAL_TIM_Base_Start_IT(&htim14);
+	HAL_TIM_Base_Start_IT(&htim16);
+	HAL_TIM_Base_Start_IT(&htim17);
 
 	ten_default_initialization();
 	init_param_from_eeprom();
+
+	boiler.display.value_to_show = 1;
 
 	boiler.parameters.user_interface_step = 0;
 	boiler.display.counter = 0;
 
 	boiler.heater.output.sensor.tC_Average = 25;
 	boiler.heatsink.sensor.tC_Average = 25;
-	boiler.pump.pump_time_activity = ONE_MINUTE;
+
+	boiler.errors = 0;
 
 	boiler.adc.Vref_Const = (uint16_t)(*(__IO uint32_t*)(0x1FFFF7BA));
-
-	boiler.heater.parameters.gisterezis = 5;
-	boiler.heater.parameters.gisterezis_coefficient = 2;
 
 	boiler.termostat.value = HAL_GPIO_ReadPin(TERMOSTAT_GPIO_Port, TERMOSTAT_Pin);
 	tickstart_1sec = HAL_GetTick();
 	tickstart_adc = HAL_GetTick();
+
+	if ((HAL_GPIO_ReadPin(JMP4_GPIO_Port, JMP4_Pin) == 0) && (HAL_GPIO_ReadPin(JMP8_GPIO_Port, JMP8_Pin) == 0))
+	{
+		boiler.testMode.flag = 1;
+		display_print_text('-', '-', '-');
+		boiler.parameters.user_interface_step = 100;
+		delay_counter_1ms = 3000;
+	}
 }
 
 

@@ -12,5 +12,6 @@ void key_state_update();
 void key_polling(uint8_t n);
 uint8_t read_key(uint8_t n);
 void user_interface_update(void);
+void show_list_of_possible_values(void);
 
 #endif /* INC_USER_INTERFACE_STATE_MACHINE_H_ */
