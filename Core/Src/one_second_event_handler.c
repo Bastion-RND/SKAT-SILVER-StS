@@ -9,7 +9,6 @@
 
 extern struct sBoiler boiler;
 extern uint32_t tickstart_1sec;
-struct sTEN ten_accum = {0};
 
 extern struct sSensor* list_of_sensors[2];
 extern uint8_t sensors_list_size;
@@ -58,11 +57,16 @@ void check_rotation()
 		  if (iterator < 2)
 			  return;
 
-		  ten_accum = *(activeTENs[0]);
+		  struct sTEN ten_accum = {0};
+
+		  ten_rotate(&ten_accum, activeTENs[0]);
 		  ten_rotate(activeTENs[0], activeTENs[1]);
 
 		  if (activeTENs[2] != NULL)
+		  {
 			  ten_rotate(activeTENs[1], activeTENs[2]);
+			  ten_rotate(activeTENs[2], &ten_accum);
+		  }
 		  else
 			  ten_rotate(activeTENs[1], &ten_accum);
 	  }
