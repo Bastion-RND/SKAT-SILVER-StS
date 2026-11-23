@@ -66,8 +66,13 @@ void heating_update() {
 		{
 			if ((get_f01() == 1) && (get_f02() == 1) && (get_f03() == 1))
 				boiler.heater.parameters.algorithm_step = 6;
-			else
+			else if (boiler.termostat.value == 0)
+			{
 				boiler.heater.parameters.algorithm_step = 10;
+				boiler.timers.counter_15_min = 0;
+			}
+			else
+				boiler.heater.parameters.algorithm_step = 12;
 		}
 		break;
 
@@ -136,15 +141,26 @@ void heating_update() {
 			  boiler.timers.counter_15_min = 0;
 			  boiler.heater.parameters.algorithm_step = 11;
 		  }
-		  else
-			  boiler.heater.parameters.algorithm_step = 12;
+		  else if ((HAL_GPIO_ReadPin(TERMOSTAT_GPIO_Port, TERMOSTAT_Pin) == 1) && (boiler.heater.output.sensor.tC_Average < (boiler.heater.parameters.aim_temp - 1)))
+		  {
+			  boiler.heater.parameters.algorithm_step = 14;
+		  	  boiler.pump.activate = 1;
+		  }
+
 		  break;
 
 	  case 11:
 		  if (boiler.pump.time_of_activity > PUMP_ACTIVITY_TIME)
 		  {
 			  set_pump_timer(0, 0);
-			  boiler.heater.parameters.algorithm_step = 12;
+			  boiler.pump.activate = 0;
+			  boiler.heater.parameters.algorithm_step = 10;
+			  boiler.timers.counter_15_min = 0;
+		  }
+		  else if ((HAL_GPIO_ReadPin(TERMOSTAT_GPIO_Port, TERMOSTAT_Pin) == 1) && (boiler.heater.output.sensor.tC_Average < (boiler.heater.parameters.aim_temp - 1)))
+		  {
+			  boiler.heater.parameters.algorithm_step = 14;
+		  	  boiler.pump.activate = 1;
 		  }
 		  break;
 
@@ -221,7 +237,6 @@ void heating_update() {
 				boiler.heater.parameters.algorithm_step = 21;
 			else
 			{
-				set_pump_timer(1, 0);
 				boiler.heater.parameters.algorithm_step = 23;
 			}
 		}
@@ -288,9 +303,7 @@ void heating_update() {
 		{
 			set_pump_timer(1, 0);
 
-			  if (boiler.heater.output.sensor.tC_Average > boiler.heater.parameters.aim_temp)
-				  boiler.pump.activate = 0;
-			  else if (boiler.termostat.value == 0)
+			  if (boiler.termostat.value == 0)
 				  boiler.pump.activate = 0;
 			  else if ((get_e01() == 1) || (get_e03() == 1))
 				  boiler.pump.activate = 0;
@@ -301,6 +314,12 @@ void heating_update() {
 			  }
 
 			boiler.heater.parameters.algorithm_step = 23;
+
+			if (boiler.heater.output.sensor.tC_Average > boiler.heater.parameters.aim_temp)
+			{
+				boiler.pump.activate = 0;
+				boiler.heater.parameters.algorithm_step = 10;
+			}
 		}
 		else
 		{
