@@ -66,7 +66,7 @@ void heating_update() {
 		{
 			if ((get_f01() == 1) && (get_f02() == 1) && (get_f03() == 1))
 				boiler.heater.parameters.algorithm_step = 6;
-			else if (boiler.termostat.value == 0)
+			else if (HAL_GPIO_ReadPin(TERMOSTAT_GPIO_Port, TERMOSTAT_Pin) == 0)
 			{
 				boiler.heater.parameters.algorithm_step = 10;
 				boiler.timers.counter_15_min = 0;
@@ -117,7 +117,7 @@ void heating_update() {
 
 			  if (boiler.heater.output.sensor.tC_Average > boiler.heater.parameters.aim_temp)
 				  boiler.pump.activate = 0;
-			  else if (boiler.termostat.value == 0)
+			  else if (HAL_GPIO_ReadPin(TERMOSTAT_GPIO_Port, TERMOSTAT_Pin) == 0)
 				  boiler.pump.activate = 0;
 			  else if ((get_e01() == 1) || (get_e03() == 1) || ((get_f01() == 1) && (get_f02() == 1) && (get_f03() == 1)))
 				  boiler.pump.activate = 0;
@@ -126,7 +126,7 @@ void heating_update() {
 		  }
 		  else if ((get_e01() == 1) || (get_e03() == 1)) {}
 		  else if ((get_f01() == 1) && (get_f02() == 1) && (get_f03() == 1)) {}
-		  else if ((boiler.termostat.value == 1) && (boiler.heater.output.sensor.tC_Average < boiler.heater.parameters.aim_temp))
+		  else if ((HAL_GPIO_ReadPin(TERMOSTAT_GPIO_Port, TERMOSTAT_Pin) == 1) && (boiler.heater.output.sensor.tC_Average < boiler.heater.parameters.aim_temp))
 		  {
 			  boiler.pump.activate = 1;
 			  boiler.heater.parameters.algorithm_step = 13;
@@ -141,11 +141,9 @@ void heating_update() {
 			  boiler.timers.counter_15_min = 0;
 			  boiler.heater.parameters.algorithm_step = 11;
 		  }
-		  else if ((HAL_GPIO_ReadPin(TERMOSTAT_GPIO_Port, TERMOSTAT_Pin) == 1) && (boiler.heater.output.sensor.tC_Average < (boiler.heater.parameters.aim_temp - 1)))
-		  {
-			  boiler.heater.parameters.algorithm_step = 14;
-		  	  boiler.pump.activate = 1;
-		  }
+		  else if (HAL_GPIO_ReadPin(TERMOSTAT_GPIO_Port, TERMOSTAT_Pin) == 1)
+			  boiler.heater.parameters.algorithm_step = 0;
+
 
 		  break;
 
@@ -157,11 +155,9 @@ void heating_update() {
 			  boiler.heater.parameters.algorithm_step = 10;
 			  boiler.timers.counter_15_min = 0;
 		  }
-		  else if ((HAL_GPIO_ReadPin(TERMOSTAT_GPIO_Port, TERMOSTAT_Pin) == 1) && (boiler.heater.output.sensor.tC_Average < (boiler.heater.parameters.aim_temp - 1)))
-		  {
-			  boiler.heater.parameters.algorithm_step = 14;
-		  	  boiler.pump.activate = 1;
-		  }
+		  else if (HAL_GPIO_ReadPin(TERMOSTAT_GPIO_Port, TERMOSTAT_Pin) == 1)
+			  boiler.heater.parameters.algorithm_step = 0;
+
 		  break;
 
 	  case 12:
@@ -215,10 +211,10 @@ void heating_update() {
 		{
 			if (boiler.termostat.value && (boiler.heater.output.sensor.tC_Average > (boiler.heater.parameters.aim_temp - HEATING_COEFFICIENT)))
 			{
-				set_pump_timer(0, 0);
+				set_pump_timer(1, 0);
 				boiler.heater.parameters.algorithm_step = 20;
 			}
-			else if (boiler.termostat.value == 0 || (get_e01() == 1) || (get_e03() == 1))
+			else if ((HAL_GPIO_ReadPin(TERMOSTAT_GPIO_Port, TERMOSTAT_Pin) == 0) || (get_e01() == 1) || (get_e03() == 1))
 				boiler.heater.parameters.algorithm_step = 6;
 			else if (boiler_temperature_below_limit(boiler.heater.output.sensor.tC_Average, MIN_OPERATION_TEMPERATURE, boiler.heater.output.sensor.Flag_Enable))
 			{
@@ -237,6 +233,7 @@ void heating_update() {
 				boiler.heater.parameters.algorithm_step = 21;
 			else
 			{
+				set_pump_timer(1, 0);
 				boiler.heater.parameters.algorithm_step = 23;
 			}
 		}
@@ -301,29 +298,32 @@ void heating_update() {
 	case 32:
 		if (boiler.pump.time_of_activity > PUMP_ACTIVITY_TIME)
 		{
-			set_pump_timer(1, 0);
-
-			  if (boiler.termostat.value == 0)
+			  if (HAL_GPIO_ReadPin(TERMOSTAT_GPIO_Port, TERMOSTAT_Pin) == 0)
+			  {
 				  boiler.pump.activate = 0;
+				  set_pump_timer(1, 0);
+			      boiler.heater.parameters.algorithm_step = 23;
+			  }
 			  else if ((get_e01() == 1) || (get_e03() == 1))
+			  {
 				  boiler.pump.activate = 0;
+				  set_pump_timer(1, 0);
+			      boiler.heater.parameters.algorithm_step = 23;
+			  }
+			  else if (boiler.heater.output.sensor.tC_Average < boiler.heater.parameters.aim_temp)
+			  {
+				  boiler.pump.activate = 1;
+			      boiler.heater.parameters.algorithm_step = 13;
+			  }
 			  else
 			  {
-					boiler.pump.activate = 1;
-					boiler.timers.counter_15_min = 0;
+				  boiler.pump.activate = 0;
+				  boiler.heater.parameters.algorithm_step = 10;
 			  }
-
-			boiler.heater.parameters.algorithm_step = 23;
-
-			if (boiler.heater.output.sensor.tC_Average > boiler.heater.parameters.aim_temp)
-			{
-				boiler.pump.activate = 0;
-				boiler.heater.parameters.algorithm_step = 10;
-			}
 		}
 		else
 		{
-			if (boiler.heater.output.sensor.tC_Average < boiler.heater.parameters.aim_temp)
+			if ((HAL_GPIO_ReadPin(TERMOSTAT_GPIO_Port, TERMOSTAT_Pin) == 1) && (boiler.heater.output.sensor.tC_Average < boiler.heater.parameters.aim_temp))
 			{
 				set_pump_timer(1, 0);
 				boiler.heater.parameters.algorithm_step = 23;
